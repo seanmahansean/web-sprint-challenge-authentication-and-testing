@@ -1,10 +1,14 @@
 const router = require('express').Router();
-const jwt = require("jsonwebtoken")
 const bcrypt = require("bcryptjs")
-const JWT_SECRET = require("./secret")
 const Users = require("./auth-model")
+const buildToken = require("../middleware/build-token");
+const {
+  checkUsernameFree,
+  checkUserPass,
+  verifyCredentials
+} = require('../middleware/middleware');
 
-router.post('/register', (req, res, next) => {
+router.post('/register', checkUsernameFree, checkUserPass, (req, res, next) => {
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -31,27 +35,20 @@ router.post('/register', (req, res, next) => {
       the response body should include a string exactly as follows: "username taken".
   */
 
-  let user = req.body
+  const user = req.body
 
-  const rounds = process.env.BCRYPT_ROUNDS || 8
-  const hash = bcrypt.hashSync(user.password, rounds)
+  const hash = bcrypt.hashSync(user.password, 8)
 
-  user.password = hash
-
-  Users.add(user)
+  Users.add({username: user.username, password: hash})
     .then(nUser => {
-      if(nUser.password && nUser.user){
-        res.status(201).json(nUser)
-      }else{
-        res.status(400).json({message: "Password and username required"})
-      }
+      res.status(201).json(nUser)
     })
     .catch(err => {
       next(err)
     })
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', checkUserPass, verifyCredentials, (req, res, next) => {
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -75,7 +72,15 @@ router.post('/login', (req, res) => {
     4- On FAILED login due to `username` not existing in the db, or `password` being incorrect,
       the response body should include a string exactly as follows: "invalid credentials".
   */
-  next()
+  if(bcrypt.compareSync(req.body.password, req.user.password)){
+    const token = buildToken(req.user)
+    res.json({
+      message: `${req.user.username} is back!`,
+      token
+    })
+  }else{
+    next({status: 401, message: "invalid credentials"})
+  }
 });
 
 module.exports = router;
